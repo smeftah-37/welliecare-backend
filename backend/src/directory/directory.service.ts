@@ -195,55 +195,55 @@ export class DirectoryService {
     // TODO: Implement actual notification logic
   }
 
-  async findDirectory(query: DirectoryQueryDto, userRole?: string): Promise<DirectoryResponse> {
-    this.validateLocationInput(query);
+  // async findDirectory(query: DirectoryQueryDto, userRole?: string): Promise<DirectoryResponse> {
+  //   this.validateLocationInput(query);
 
-    const {
-      page = 1,
-      limit = 20,
-      search,
-      specialite,
-      titre,
-      pays,
-      ville,
-      latitude,
-      longitude,
-      maxDistance = 50,
-      status = 'validated'
-    } = query;
+  //   const {
+  //     page = 1,
+  //     limit = 20,
+  //     search,
+  //     specialite,
+  //     titre,
+  //     pays,
+  //     ville,
+  //     latitude,
+  //     longitude,
+  //     maxDistance = 50,
+  //     status = 'validated'
+  //   } = query;
 
-    if (status !== 'validated' && userRole !== 'admin') {
-      throw new ForbiddenException('Accès non autorisé aux professionnels non validés');
-    }
+  //   if (status !== 'validated' && userRole !== 'admin') {
+  //     throw new ForbiddenException('Accès non autorisé aux professionnels non validés');
+  //   }
 
-    const skip = (page - 1) * limit;
+  //   const skip = (page - 1) * limit;
 
-    let queryBuilder = this.createSecureQueryBuilder();
+  //   let queryBuilder = this.createSecureQueryBuilder();
     
-    queryBuilder.where('professional.status = :status', { status });
+  //   queryBuilder.where('professional.status = :status', { status });
 
-    this.applyFilters(queryBuilder, { specialite, titre, pays, ville });
-    this.applySecureSearch(queryBuilder, search);
-    this.applyLocationFilter(queryBuilder, latitude, longitude, maxDistance);
+  //   this.applyFilters(queryBuilder, { specialite, titre, pays, ville });
+  //   this.applySecureSearch(queryBuilder, search);
+  //   this.applyLocationFilter(queryBuilder, latitude, longitude, maxDistance);
 
-    const total = await this.getSecureCount(queryBuilder);
+  //   const total = await this.getSecureCount(queryBuilder);
 
-    const professionals = await queryBuilder
-      .skip(skip)
-      .take(limit)
-      .getRawAndEntities();
+  //   const professionals = await queryBuilder
+  //     .skip(skip)
+  //     .take(limit)
+  //     .getRawAndEntities();
 
-    const data = this.mapToSafeResponse(professionals.entities, latitude, longitude, professionals.raw);
+  //   const data = this.mapToSafeResponse(professionals.entities, latitude, longitude, professionals.raw);
 
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      hasMore: page < Math.ceil(total / limit)
-    };
-  }
+  //   return {
+  //     data,
+  //     total,
+  //     page,
+  //     limit,
+  //     totalPages: Math.ceil(total / limit),
+  //     hasMore: page < Math.ceil(total / limit)
+  //   };
+  // }
 
   private validateLocationInput(query: DirectoryQueryDto): void {
     const { latitude, longitude } = query;
@@ -339,41 +339,105 @@ export class DirectoryService {
   }
 
   // FIXED: Updated location filter to use ST_MakePoint instead of ST_GeogFromText
-  private applyLocationFilter(
-    queryBuilder: SelectQueryBuilder<Professional>,
-    latitude?: number,
-    longitude?: number,
-    maxDistance?: number
-  ): void {
-    if (!latitude || !longitude) {
-      queryBuilder.addOrderBy('professional.createdAt', 'DESC');
-      return;
-    }
-
-    const distance = Math.min(200, Math.max(1, maxDistance || 50));
-
-    queryBuilder
-      .addSelect(`
-        CASE 
-          WHEN professional.latitude IS NOT NULL AND professional.longitude IS NOT NULL THEN
-            ST_Distance(
-              ST_SetSRID(ST_MakePoint(professional.longitude, professional.latitude), 4326)::geography,
-              ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
-            ) / 1000
-          ELSE NULL
-        END as distance
-      `)
-      .andWhere(`
-        professional.latitude IS NOT NULL 
-        AND professional.longitude IS NOT NULL
-        AND ST_DWithin(
-          ST_SetSRID(ST_MakePoint(professional.longitude, professional.latitude), 4326)::geography,
-          ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
-          :maxDistance * 1000
-        )
-      `, { latitude, longitude, maxDistance: distance })
-      .addOrderBy('distance', 'ASC');
+private applyLocationFilter(
+  queryBuilder: SelectQueryBuilder<Professional>,
+  latitude?: number,
+  longitude?: number,
+  maxDistance?: number,
+  isLocationSearch?: boolean | undefined | 0 // Add this parameter
+): void {
+  // Only apply distance-based filtering if it's explicitly a location search
+  if (!latitude || !longitude || !isLocationSearch) {
+    queryBuilder.addOrderBy('professional.createdAt', 'DESC');
+    return;
   }
+
+  const distance = Math.min(200, Math.max(1, maxDistance || 50));
+
+  queryBuilder
+    .addSelect(`
+      CASE 
+        WHEN professional.latitude IS NOT NULL AND professional.longitude IS NOT NULL THEN
+          ST_Distance(
+            ST_SetSRID(ST_MakePoint(professional.longitude, professional.latitude), 4326)::geography,
+            ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography
+          ) / 1000
+        ELSE NULL
+      END as distance
+    `)
+    .andWhere(`
+      professional.latitude IS NOT NULL 
+      AND professional.longitude IS NOT NULL
+      AND ST_DWithin(
+        ST_SetSRID(ST_MakePoint(professional.longitude, professional.latitude), 4326)::geography,
+        ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)::geography,
+        :maxDistance * 1000
+      )
+    `, { latitude, longitude, maxDistance: distance })
+    .addOrderBy('distance', 'ASC');
+}
+
+// Updated findDirectory method
+async findDirectory(query: DirectoryQueryDto, userRole?: string): Promise<DirectoryResponse> {
+  this.validateLocationInput(query);
+
+  const {
+    page = 1,
+    limit = 20,
+    search,
+    specialite,
+    titre,
+    pays,
+    ville,
+    latitude,
+    longitude,
+    maxDistance = 50,
+    status = 'validated'
+  } = query;
+
+  if (status !== 'validated' && userRole !== 'admin') {
+    throw new ForbiddenException('Accès non autorisé aux professionnels non validés');
+  }
+
+  const skip = (page - 1) * limit;
+
+  let queryBuilder = this.createSecureQueryBuilder();
+  
+  queryBuilder.where('professional.status = :status', { status });
+
+  // Apply basic filters first
+  this.applyFilters(queryBuilder, { specialite, titre, pays, ville });
+  this.applySecureSearch(queryBuilder, search);
+
+  // Determine if this is a location-based search vs city-based search
+  const isLocationSearch = latitude && longitude && !ville;
+  
+  // Only apply location filtering if it's explicitly a proximity search
+  this.applyLocationFilter(queryBuilder, latitude, longitude, maxDistance, isLocationSearch);
+
+  const total = await this.getSecureCount(queryBuilder);
+
+  const professionals = await queryBuilder
+    .skip(skip)
+    .take(limit)
+    .getRawAndEntities();
+
+  const data = this.mapToSafeResponse(
+    professionals.entities, 
+    isLocationSearch ? latitude : undefined, 
+    isLocationSearch ? longitude : undefined, 
+    professionals.raw
+  );
+
+  return {
+    data,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+    hasMore: page < Math.ceil(total / limit)
+  };
+}
 
   private async getSecureCount(queryBuilder: SelectQueryBuilder<Professional>): Promise<number> {
     const countQuery = queryBuilder.clone()

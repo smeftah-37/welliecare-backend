@@ -15,7 +15,8 @@ import {
   UploadedFile,
   NotFoundException,
   ForbiddenException,
-  Param
+  Param,
+  ParseFloatPipe
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse, ApiBearerAuth, ApiSecurity, ApiProperty, ApiParam, ApiBody } from '@nestjs/swagger';
 import { DirectoryService, DirectoryQueryDto, SafeProfessionalResponse } from './directory.service';
@@ -280,42 +281,42 @@ private validateProfessionalData(data: ProfessionalRegistrationDto): void {
     return this.directoryService.findDirectory(query, userRole);
   }
 
-  @Get('nearby')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ 
-    summary: 'Trouver des professionnels à proximité',
-    description: 'Retourne les professionnels validés dans un rayon donné autour d\'une position'
-  })
-  @ApiQuery({ name: 'latitude', required: true, type: Number, description: 'Latitude de référence' })
-  @ApiQuery({ name: 'longitude', required: true, type: Number, description: 'Longitude de référence' })
-  @ApiQuery({ name: 'radius', required: false, type: Number, description: 'Rayon de recherche en km (défaut: 10, max: 50)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Professionnels à proximité triés par distance',
-    type: [Object]
-  })
-  async getNearbyProfessionals(
-    @Query('latitude', new ParseIntPipe({ errorHttpStatusCode: 400 })) latitude: number,
-    @Query('longitude', new ParseIntPipe({ errorHttpStatusCode: 400 })) longitude: number,
-    @Query('radius') radius: number = 10,
-    @Request() req: any
-  ): Promise<SafeProfessionalResponse[]> {
-    // Additional validation
-    if (!latitude || !longitude) {
-      throw new BadRequestException('Latitude et longitude sont obligatoires');
-    }
-
-    const userRole = req.user?.role || 'user';
-    const safeRadius = Math.min(50, Math.max(1, Number(radius) || 10));
-
-    return this.directoryService.getNearbyProfessionals(
-      Number(latitude),
-      Number(longitude),
-      safeRadius,
-      userRole
-    );
+@Get('nearby')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+@ApiOperation({ 
+  summary: 'Trouver des professionnels à proximité',
+  description: 'Retourne les professionnels validés dans un rayon donné autour d\'une position'
+})
+@ApiQuery({ name: 'latitude', required: true, type: Number, description: 'Latitude de référence' })
+@ApiQuery({ name: 'longitude', required: true, type: Number, description: 'Longitude de référence' })
+@ApiQuery({ name: 'radius', required: false, type: Number, description: 'Rayon de recherche en km (défaut: 10, max: 50)' })
+@ApiResponse({
+  status: 200,
+  description: 'Professionnels à proximité triés par distance',
+  type: [Object]
+})
+async getNearbyProfessionals(
+  @Query('latitude', new ParseFloatPipe({ errorHttpStatusCode: 400 })) latitude: number, // Changed to ParseFloatPipe
+  @Query('longitude', new ParseFloatPipe({ errorHttpStatusCode: 400 })) longitude: number, // Changed to ParseFloatPipe
+  @Query('radius') radius: number = 10,
+  @Request() req: any
+): Promise<SafeProfessionalResponse[]> {
+  // Additional validation
+  if (!latitude || !longitude) {
+    throw new BadRequestException('Latitude et longitude sont obligatoires');
   }
+
+  const userRole = req.user?.role || 'user';
+  const safeRadius = Math.min(50, Math.max(1, Number(radius) || 10));
+
+  return this.directoryService.getNearbyProfessionals(
+    Number(latitude),
+    Number(longitude),
+    safeRadius,
+    userRole
+  );
+}
 
   @Get('admin/pending')
   @UseGuards(JwtAuthGuard, RoleGuard)
